@@ -1,99 +1,150 @@
-# Web Application Vulnerability Scanner
+# SentinelX
 
-A Python tool that crawls a web application and automatically tests it for:
+**AI-assisted attack surface & threat detection platform — for authorized security assessments only.**
 
-- **SQL Injection** — error-based and time-based blind detection across URL parameters and HTML forms
-- **Cross-Site Scripting (XSS)** — reflected XSS detection across URL parameters and HTML forms
-- **Broken Authentication** — weak/default credential login attempts, missing account lockout, insecure session cookie flags (`Secure`/`HttpOnly`/`SameSite`), and login forms submitted over plaintext HTTP
-- Optional **OWASP ZAP** integration for a deeper spider + active scan pass, with ZAP alerts normalized into the same report
+SentinelX is a modular security platform that takes an authorized asset through the full
+lifecycle: **discovery → assessment → detection → correlation → risk → remediation → reporting.**
+It combines a Python/FastAPI backend, a reusable scanning engine, a threat-detection and
+correlation engine, an explainable risk model, a tool-bounded AI analyst, and a Next.js
+dashboard.
 
-Findings are exported as JSON and a self-contained HTML report.
+> ⚠️ **Authorized use only.** SentinelX sends real requests and attack payloads to targets.
+> It refuses to scan any asset that has not been explicitly marked **AUTHORIZED**, and (outside
+> an opt-in local-lab mode) refuses targets that resolve to private/loopback addresses. Only
+> scan systems you own or are explicitly authorized to test. See [SECURITY.md](SECURITY.md).
 
-> **For authorized security testing only.** Only scan applications you own or have explicit written permission to test. This tool sends real attack payloads and login attempts to the target.
+---
 
 ## Features
 
-- Same-origin BFS crawler (`requests` + `BeautifulSoup`) that discovers pages and HTML forms
-- Concurrent, rate-limited scanning (configurable threads and requests/second)
-- Modular checks (`scanner/sqli.py`, `scanner/xss.py`, `scanner/auth.py`) that are easy to extend
-- Optional OWASP ZAP spider + active scan via `python-owasp-zap-v2.4`
-- JSON + HTML report output, colorized CLI summary
-- Non-zero exit code when HIGH/CRITICAL findings are present (CI-friendly)
-- Includes a deliberately vulnerable Flask testbed app to try the scanner safely
+- **Authentication** — registration, login, refresh tokens, Argon2id password hashing,
+  account lockout, and login rate limiting.
+- **RBAC & multi-tenancy** — organizations → projects → assets → scans → findings → alerts →
+  reports, with `ADMIN` / `SECURITY_ANALYST` / `VIEWER` roles enforced **server-side**. Users
+  cannot see or touch another organization's data (404, not 403, to avoid leaking existence).
+- **Authorized asset inventory** — typed assets with an authorization lifecycle; scanning is
+  gated on `AUTHORIZED` status plus SSRF-safe target validation.
+- **Scan engine** — same-origin crawler, error/time-based SQL injection, reflected XSS,
+  broken-authentication, and passive HTTP security-header checks; rate-limited, cancellable,
+  with a hard deadline. Optional OWASP ZAP integration.
+- **Findings & explainable risk** — normalized findings de-duplicated by fingerprint, each with
+  a transparent `risk_score` = weighted sum of severity, asset criticality, exposure, confidence
+  and age (every contribution stored and shown).
+- **Threat detection** — ingest structured security events; declarative, versioned detection
+  rules raise de-duplicated alerts (brute force, password spray, port-scan, etc.).
+- **MITRE ATT&CK** — findings map to **POTENTIAL** techniques; detections carry **OBSERVED**
+  techniques. The two are never conflated.
+- **Correlation engine** — explains *why* entities are related (e.g. a finding's potential
+  technique matching an alert's observed technique elevates the alert to `CORRELATED`).
+- **Security graph** — derived from the relational model (no graph DB required).
+- **AI Security Analyst** — read-only, tool-bounded, separates **facts** from **AI analysis**;
+  works deterministically offline and can optionally call an LLM with prompt-injection defenses.
+- **Reporting** — executive & technical reports as PDF / CSV / JSON from real data.
+- **Audit logging** of security-sensitive actions (never secrets).
 
-## Install
+## Architecture
+
+```
+webvuln-scanner/            (SentinelX monorepo)
+├── scanner/                # Discovery / vulnerability engine library (crawler, sqli, xss, auth, headers, zap)
+├── testbed/                # Deliberately-vulnerable Flask app for the local lab
+├── backend/
+│   ├── app/
+│   │   ├── core/           # config, db, security (Argon2/JWT), rbac, netsafe (SSRF), logging, rate limit
+│   │   ├── models/         # SQLAlchemy models (19 tables)
+│   │   ├── schemas/        # Pydantic request/response models
+│   │   ├── services/       # risk, detection, correlation, scan_runner, graph, report, ai analyst
+│   │   ├── api/v1/         # versioned REST API
+│   │   └── worker/         # Celery app + tasks (eager when no Redis)
+│   ├── alembic/            # migrations
+│   └── tests/              # unit / integration / security
+├── frontend/               # Next.js + TypeScript + Tailwind dashboard
+├── docker/                 # backend & frontend Dockerfiles, entrypoint
+├── docker-compose.yml      # full stack: db, redis, backend, worker, frontend
+└── docs/                   # architecture, security, api, development, deployment
+```
+
+**Stack:** FastAPI · SQLAlchemy 2 · Pydantic v2 · Alembic · Celery/Redis · PostgreSQL (SQLite
+for local dev/test) · Next.js 14 · Recharts · Docker · GitHub Actions.
+
+## Quick start (Docker)
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate   # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
+cp .env.example .env
+# set a strong SECRET_KEY:  python -c "import secrets; print(secrets.token_urlsafe(48))"
+docker compose up --build
 ```
 
-## Usage
+- API: http://localhost:8000  (docs at `/docs`)
+- Frontend: http://localhost:3000
+
+## Quick start (local, no Docker)
+
+Requires Python 3.12 and Node 20.
 
 ```bash
-python main.py http://target.example/ --i-have-authorization
-```
+# Backend
+python -m venv .venv && . .venv/Scripts/activate   # (Windows) or: source .venv/bin/activate
+pip install -r backend/requirements-dev.txt
 
-Common options:
+cd backend
+python -m app.db_init            # create SQLite schema + seed reference data
+python -m scripts.seed_demo      # optional: demo user, org, project, authorized lab asset
+uvicorn app.main:app --reload    # http://localhost:8000
+```
 
 ```bash
-python main.py http://target.example/ \
-  --i-have-authorization \
-  --max-pages 200 \
-  --threads 8 \
-  --rps 5 \
-  --skip-auth-bruteforce \
-  --output-dir reports
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev                      # http://localhost:3000
 ```
 
-Include an OWASP ZAP active scan (requires ZAP running locally with its API enabled):
+Demo login (after `seed_demo`): **demo@sentinelx.io / SentinelX-demo-1234**
+
+## Local security lab
+
+The bundled Flask testbed is deliberately vulnerable and is only meant to be scanned locally:
 
 ```bash
-python main.py http://target.example/ --i-have-authorization --use-zap --zap-api-key <key>
+python testbed/vulnerable_app.py         # serves http://127.0.0.1:5000
 ```
 
-Reports are written to `reports/scan_report.json` and `reports/scan_report.html`.
+Set `ALLOW_PRIVATE_SCAN_TARGETS=true` to permit scanning loopback targets, then run a `FULL`
+scan against the authorized testbed asset from the UI or API. It surfaces SQL injection, reflected
+XSS, broken authentication, and missing security headers.
 
-## Try it locally against the included testbed
+## Testing
 
 ```bash
-pip install -r requirements-dev.txt
-python testbed/vulnerable_app.py
-# in another terminal:
-python main.py http://127.0.0.1:5000/ --i-have-authorization
+# Scanner engine unit tests
+pytest tests -q
+
+# Backend unit + integration + security tests (incl. a live scan against the testbed)
+cd backend
+ALLOW_PRIVATE_SCAN_TARGETS=true SECRET_KEY=test-key pytest -q
+
+# Lint
+ruff check backend scanner
+
+# Frontend
+cd frontend && npm run lint && npm run build
 ```
 
-This should surface SQL injection on `/search`, reflected XSS on `/comment`, and a
-successful weak-credential login (`admin`/`admin`) on `/login`.
+## Documentation
 
-## Run tests
+- [docs/architecture.md](docs/architecture.md) — components, data model, request flow
+- [docs/security.md](docs/security.md) — threat model & controls
+- [docs/api.md](docs/api.md) — REST API overview
+- [docs/development.md](docs/development.md) — local dev workflow
+- [docs/deployment.md](docs/deployment.md) — production deployment
+- [SECURITY.md](SECURITY.md) — authorized-use policy & vulnerability reporting
 
-```bash
-pip install -r requirements-dev.txt
-pytest -v
-```
+## Roadmap
 
-## Project layout
+See the "Known limitations" section of the final audit in [docs/AUDIT.md](docs/AUDIT.md).
 
-```
-scanner/
-  crawler.py      # site crawler (pages + forms)
-  payloads.py      # SQLi/XSS payloads, SQL error signatures, weak credential list
-  findings.py      # Finding / Severity data model
-  sqli.py          # SQL injection checks
-  xss.py           # reflected XSS checks
-  auth.py          # broken authentication checks
-  zap_client.py    # optional OWASP ZAP API integration
-  engine.py         # crawl + concurrent scan orchestration, rate limiting
-  report.py         # JSON/HTML report rendering
-main.py             # CLI entrypoint
-testbed/             # deliberately vulnerable Flask app for local testing
-tests/               # pytest unit tests (mocked HTTP, no network)
-```
+## License
 
-## Disclaimer
-
-This project is for educational and authorized security-testing purposes only
-(e.g. your own applications, CTF targets, or engagements with written
-authorization). The authors are not responsible for misuse.
+[MIT](LICENSE). Provided for authorized security testing and education only; the authors are
+not responsible for misuse.

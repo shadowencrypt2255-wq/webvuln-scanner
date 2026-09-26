@@ -25,6 +25,10 @@ SQLI_ERROR_SIGNATURES = [
     "syntax error at or near",
     "mysql_fetch",
     "native client",
+    # SQLite-specific error phrasing (low false-positive, DB-distinctive).
+    "unrecognized token",
+    "incomplete input",
+    "sqlitedatabaseerror",
 ]
 
 XSS_PAYLOADS = [

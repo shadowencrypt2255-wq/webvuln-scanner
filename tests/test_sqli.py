@@ -1,6 +1,6 @@
 import requests_mock
 
-from scanner.sqli import test_url_params
+from scanner.sqli import test_url_params as run_sqli_url_params
 
 
 def test_detects_error_based_sqli():
@@ -13,7 +13,7 @@ def test_detects_error_based_sqli():
 
         m.get(requests_mock.ANY, text=responder)
         import requests
-        findings = test_url_params(url, requests.Session())
+        findings = run_sqli_url_params(url, requests.Session())
 
     assert any(f.category == "SQL Injection" for f in findings)
 
@@ -23,6 +23,6 @@ def test_no_findings_on_clean_target():
     with requests_mock.Mocker() as m:
         m.get(requests_mock.ANY, text="all good, no errors")
         import requests
-        findings = test_url_params(url, requests.Session())
+        findings = run_sqli_url_params(url, requests.Session())
 
     assert findings == []

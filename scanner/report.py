@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import html
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .findings import Finding, Severity
 
@@ -20,7 +20,7 @@ SEVERITY_COLORS = {
 def to_json(target: str, findings: list[Finding], pages_crawled: int, forms_found: int) -> str:
     payload = {
         "target": target,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "pages_crawled": pages_crawled,
         "forms_found": forms_found,
         "finding_count": len(findings),
@@ -87,7 +87,7 @@ def to_html(target: str, findings: list[Finding], pages_crawled: int, forms_foun
 </head>
 <body>
   <h1>Web Vulnerability Scan Report</h1>
-  <div class="meta">Target: {html.escape(target)} &middot; Generated: {datetime.now(timezone.utc).isoformat()} &middot; Pages crawled: {pages_crawled} &middot; Forms found: {forms_found}</div>
+  <div class="meta">Target: {html.escape(target)} &middot; Generated: {datetime.now(UTC).isoformat()} &middot; Pages crawled: {pages_crawled} &middot; Forms found: {forms_found}</div>
   <div class="summary">{summary_cards}</div>
   <table>
     <thead><tr><th>Severity</th><th>Category</th><th>URL</th><th>Parameter</th><th>Details</th></tr></thead>

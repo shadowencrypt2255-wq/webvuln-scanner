@@ -1,0 +1,16 @@
+line-length = 110
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+    "B008",  # FastAPI uses callables in argument defaults (Depends/Query)
+    "E402",  # deliberate late imports after sys.path setup / env config
+    "E501",  # line length is handled by convention, not enforced
+    "E741",  # ambiguous variable names are acceptable in a few local scopes
+    "UP042", # (str, Enum) is a deliberate, portable pattern (not StrEnum)
+    "UP046", # Pydantic generic models use Generic[T], not PEP 695 syntax
+]
+
+[lint.per-file-ignores]
+"backend/alembic/**" = ["F401"]
