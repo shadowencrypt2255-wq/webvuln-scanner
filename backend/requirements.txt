@@ -1,0 +1,24 @@
+# SentinelX backend runtime dependencies
+fastapi>=0.111,<0.116
+uvicorn[standard]>=0.29,<0.35
+pydantic>=2.7,<3
+pydantic-settings>=2.2,<3
+SQLAlchemy>=2.0.30,<2.1
+alembic>=1.13,<2
+argon2-cffi>=23.1
+PyJWT>=2.8,<3
+python-multipart>=0.0.9
+email-validator>=2.1
+httpx>=0.27
+reportlab>=4.1
+tldextract>=5.1
+
+# Engine library (crawler / discovery / passive checks) reused from the scanner
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+
+# Optional production async stack (not required for local SQLite dev/test).
+# Installed in the Docker worker image.
+celery>=5.3
+redis>=5.0
+psycopg[binary]>=3.1

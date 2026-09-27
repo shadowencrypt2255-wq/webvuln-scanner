@@ -110,7 +110,8 @@ def check_weak_credentials(form, session: requests.Session, timeout: int = 10,
 def check_session_cookies(url: str, session: requests.Session, timeout: int = 10) -> list[Finding]:
     findings = []
     try:
-        resp = session.get(url, timeout=timeout)
+        # The response body is not needed; this call populates session.cookies.
+        session.get(url, timeout=timeout)
     except requests.RequestException:
         return findings
 
